@@ -103,11 +103,13 @@ nice -n 19 python QR_Itp.py --year 2006 --date 170
 ## Output Structure
 
 The final processed data is saved as a CF-compliant NetCDF4 file (.nc) using zlib compression (compression level 5) to minimize storage footprint.
+
 Coordinates:
  - `time`: Standard YYYY-MM-DD timestamp derived from the Julian day.
  - `lev`: ERA5 pressure levels (hPa).
  - `lat`: ERA5 latitude grid (degrees North).
  - `lon`: ERA5 longitude grid (degrees East).
+
 Data Variables:
  - `QSW`: Shortwave Radiative Heating Rate (K/day).
  - `QLW`: Longwave Radiative Heating Rate (K/day).
