@@ -1,6 +1,6 @@
 #!/bin/bash
 
-START_YEAR=2007
+START_YEAR=2006
 END_YEAR=2017
 
 # Loop through each year

@@ -177,7 +177,7 @@ if __name__ == "__main__":
 
     # check whether the saving exist or not, if not create one.
     data_path: str = f"/data92/b11209013/CloudSat/DATA/{year}/"
-    os.makedirs(data_dir, exist_ok=True)
+    os.makedirs(data_path, exist_ok=True)
 
     # Load geopotential height from ERA5
     with xr.open_dataset(f"/data92/b11209013/ERA5/z/z_{year}.nc", chunks={}, engine="netcdf4") as z_ds:
