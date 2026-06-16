@@ -65,8 +65,8 @@ flowchart TD
     end
 
     %% Flow
-    Pool ==>|Dispatch| Parallel Swath Processing
-    Parallel Swath Processing ==>|Yield local_qr| Agg[Master Array Aggregation]:::process
+    Pool ==>|Dispatch| WorkerBox
+    WorkerBox ==>|Yield local_qr| Agg[Master Array Aggregation]:::process
     
     %% Finalization
     Agg --> Mean[Calculate Domain Mean:\nSum / Count]:::math
