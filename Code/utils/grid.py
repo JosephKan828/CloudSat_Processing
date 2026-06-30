@@ -25,6 +25,9 @@ def assign_rays_to_grid(
     lat_edges: np.ndarray = np.linspace(lat_grid[0] - dy/2, lat_grid[-1] + dy/2, len(lat_grid) + 1)
     i_lon: np.ndarray = np.searchsorted(lon_edges, lon_ray, side="right") - 1
     i_lat: np.ndarray = np.searchsorted(lat_edges, lat_ray, side="right") - 1
+
+    i_lon[i_lon == len(lon_grid)] = 0
+
     valid: np.ndarray = (
         (i_lon >= 0) & (i_lon < len(lon_grid)) &
         (i_lat >= 0) & (i_lat < len(lat_grid))

@@ -18,6 +18,7 @@ def load_data(fname) -> tuple[np.ndarray, ...]:
     vs.end()
 
     lon[lon <= 0] += 360
+    lon = lon % 360
     
     file_sd = SD(fname, SDC.READ)
     # 100.0 is scale factor, check in official website of CloudSat
@@ -63,14 +64,14 @@ def save_data(
     date_str = time_coord.strftime("%Y-%m-%d") # e.g., "2006-06-19"
 
     # 2. Extract Data Variables
-    qsw_mean = data[:, :, :, 0]
-    qlw_mean = data[:, :, :, 1]
+    qsw_mean = np.expand_dims(data[:, :, :, 0], axis=0)
+    qlw_mean = np.expand_dims(data[:, :, :, 1], axis=0)
 
     # 3. Build xarray Dataset
     ds_out = xr.Dataset(
         data_vars=dict(
-            QSW=(["lev", "lat", "lon"], qsw_mean, {"units": "K/day", "long_name": "Shortwave Radiative Heating"}),
-            QLW=(["lev", "lat", "lon"], qlw_mean, {"units": "K/day", "long_name": "Longwave Radiative Heating"}),
+            QSW=(["time", "lev", "lat", "lon"], qsw_mean, {"units": "K/day", "long_name": "Shortwave Radiative Heating"}),
+            QLW=(["time", "lev", "lat", "lon"], qlw_mean, {"units": "K/day", "long_name": "Longwave Radiative Heating"}),
         ),
         coords=dict(
             time=(["time"], [time_coord]),

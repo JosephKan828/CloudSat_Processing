@@ -30,7 +30,7 @@ from pprint import pprint
 import matplotlib.pyplot as plt
 
 # import local package
-sys.path.append("utils")
+sys.path.append("/data92/b11209013/CloudSat/Code/utils")
 import cs_io
 import grid
 
@@ -71,10 +71,15 @@ def _single_file(
         qlw_lev = grid.interp_profile_to_era5_levels(hgt[k], qlw[k], z_col)
         qsw_lev = grid.interp_profile_to_era5_levels(hgt[k], qsw[k], z_col)
 
-        m = np.isfinite(qlw_lev) | np.isfinite(qsw_lev)
-        local_qr_sum[m, i_lat[k], i_lon[k], 0] += np.nan_to_num(qsw_lev[m])
-        local_qr_sum[m, i_lat[k], i_lon[k], 1] += np.nan_to_num(qlw_lev[m])
-        local_qr_cnt[m, i_lat[k], i_lon[k], :] += 1
+        # calculate for sw
+        m_sw: np.ndarray = np.isfinite(qsw_lev)
+        local_qr_sum[m_sw, i_lat[k], i_lon[k], 0] += qsw_lev[m_sw]
+        local_qr_cnt[m_sw, i_lat[k], i_lon[k], 0] += 1
+
+        # calculate for lw
+        m_lw: np.ndarray = np.isfinite(qlw_lev)
+        local_qr_sum[m_lw, i_lat[k], i_lon[k], 1] += qlw_lev[m_lw]
+        local_qr_cnt[m_lw, i_lat[k], i_lon[k], 1] += 1
 
     return local_qr_sum, local_qr_cnt
 
@@ -126,18 +131,21 @@ def main(
 
     num_cores = 8 
     
-    with concurrent.futures.ProcessPoolExecutor(max_workers=num_cores) as executor:
-        # Submit all tasks to the executor
-        # We use a list comprehension to pass the ERA5 arrays to every worker alongside the file
-        futures = [executor.submit(_single_file, f, lon_era5, lat_era5, z_era5) for f in files]
+    # with concurrent.futures.ProcessPoolExecutor(max_workers=num_cores) as executor:
+    #     # Submit all tasks to the executor
+    #     # We use a list comprehension to pass the ERA5 arrays to every worker alongside the file
+    #     futures = [executor.submit(_single_file, f, lon_era5, lat_era5, z_era5) for f in files]
         
-        # Gather results as they finish, wrapping in tqdm for a progress bar
-        for future in concurrent.futures.as_completed(futures):
-            local_sum, local_cnt = future.result()
+    #     # Gather results as they finish, wrapping in tqdm for a progress bar
+    #     for future in concurrent.futures.as_completed(futures):
+    #         local_sum, local_cnt = future.result()
             
-            # Add the worker's results to the master array
-            qr_sum += local_sum
-            qr_cnt += local_cnt
+    #         # Add the worker's results to the master array
+    #         qr_sum += local_sum
+    #         qr_cnt += local_cnt
+
+    for f in files:
+        local_sum, local_cnt = _single_file(f, lon_era5, lat_era5, z_era5)
 
     # Calculate final mean
     qr_mean = np.full_like(qr_sum, np.nan) 
