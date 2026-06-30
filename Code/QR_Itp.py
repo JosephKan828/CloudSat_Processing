@@ -31,8 +31,8 @@ import matplotlib.pyplot as plt
 
 # import local package
 sys.path.append("/data92/b11209013/CloudSat/Code/utils")
-import cs_io
-import grid
+import cs_io #type: ignore
+import grid #type: ignore
 
 # ====================================================
 # Helper function
@@ -130,22 +130,12 @@ def main(
     qr_cnt: np.ndarray = np.zeros((n_lev, n_lat, n_lon, 2))
 
     num_cores = 8 
-    
-    # with concurrent.futures.ProcessPoolExecutor(max_workers=num_cores) as executor:
-    #     # Submit all tasks to the executor
-    #     # We use a list comprehension to pass the ERA5 arrays to every worker alongside the file
-    #     futures = [executor.submit(_single_file, f, lon_era5, lat_era5, z_era5) for f in files]
-        
-    #     # Gather results as they finish, wrapping in tqdm for a progress bar
-    #     for future in concurrent.futures.as_completed(futures):
-    #         local_sum, local_cnt = future.result()
-            
-    #         # Add the worker's results to the master array
-    #         qr_sum += local_sum
-    #         qr_cnt += local_cnt
 
     for f in files:
         local_sum, local_cnt = _single_file(f, lon_era5, lat_era5, z_era5)
+
+        qr_sum += local_sum
+        qr_cnt += local_cnt
 
     # Calculate final mean
     qr_mean = np.full_like(qr_sum, np.nan) 
