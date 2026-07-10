@@ -70,11 +70,14 @@ def main(
 
     # 1. Load all available files instantly in parallel
     print(f"Loading {len(files)} files via open_mfdataset...")
+    
+    # We must chunk along time (e.g., 30 days) instead of 1 day to drastically reduce the number of disk I/O writes.
     ds_combine = xr.open_mfdataset(
         files, 
         combine="nested", 
         concat_dim="time", 
-        parallel=True
+        parallel=True,
+        chunks={'time': 30, 'lev': -1, 'lat': -1, 'lon': -1} 
     )
     
     # 2. Let Xarray automatically fill all missing dates with NaNs
@@ -93,15 +96,22 @@ def main(
         "contact": "r14229003@ntu.edu.tw",
         "history": f"Created on {pd.Timestamp.now().strftime('%Y-%m-%d')} via Python xarray.",
         "source": "CloudSat Level 2 FLXHR-Lidar product (or appropriate source)",
-        "Conventions": "CF-1.8" # Optional: Indicates you follow standard Climate & Forecast metadata conventions
+        "Conventions": "CF-1.8" 
     }
 
     ds_combine = ds_combine.transpose("time", "lev", "lat", "lon")
-
     ds_combine.encoding["unlimited_dims"] = ["time"]
 
+    # 3. Add compression! Without this, it writes a 112GB raw uncompressed file, which takes forever!
+    encoding_settings = {
+        "QSW": {"zlib": True, "complevel": 5, "_FillValue": np.nan},
+        "QLW": {"zlib": True, "complevel": 5, "_FillValue": np.nan},
+        "time": {"units": "days since 1900-01-01 00:00:00"}
+    }
+
     # write out the finalized dataset
-    ds_combine.to_netcdf(save_path)
+    print(f"Writing concatenated dataset to {save_path}...")
+    ds_combine.to_netcdf(save_path, encoding=encoding_settings)
 
     #  close ds
     ds_combine.close()
@@ -122,6 +132,10 @@ if __name__ == "__main__":
 
     parser.add_argument("--year", type=int, required=True)
     args = parser.parse_args()
+
+    # Removed the explicit dask Client() here. 
+    # Xarray will automatically fall back to the default Dask threaded scheduler, 
+    # which has built-in thread locks specifically designed to safely write NetCDF4 files!
 
     main(year=args.year)
 

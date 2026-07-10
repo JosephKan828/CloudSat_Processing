@@ -28,18 +28,22 @@ def load_data(fname) -> tuple[np.ndarray, ...]:
     # 1 of QR stands for longwave radiation
     qlw = np.array(file_sd.select("QR")[1][:])
     file_sd.end()
-
-    # filter false data
+    
+    # filter out-of-bound data
     qsw = np.where(
-        (qsw<= -200) | (qsw>= 200),
+        (qsw<= -20000) | (qsw>= 20000),
         np.nan,
         qsw
-    ) / 100.0
+    )
     qlw = np.where(
-        (qlw<= -200) | (qlw>= 200),
+        (qlw<= -20000) | (qlw>= 20000),
         np.nan,
         qlw
-    ) / 100.0
+    )
+
+    # filter missing data
+    qsw = np.where(qsw == -9999, np.nan, qsw) / 100.0
+    qlw = np.where(qlw == -9999, np.nan, qlw) / 100.0
 
     return lon, lat, hgt, qlw, qsw
 
