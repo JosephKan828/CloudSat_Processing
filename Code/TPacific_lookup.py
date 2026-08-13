@@ -103,11 +103,6 @@ def main() -> None:
             ) as lw_file:
         json.dump(lw_valid_idx, lw_file, indent=4)
 
-    # with open(
-    #         "/data92/b11209013/CloudSat/DATA/tropical_valid/lw_valid_idx.json",
-    #         "w"
-    #         ) as lw_file:
-    #     json.dump(lw_valid_idx, lw_file, indent=4)
     with open(
             "/data92/b11209013/CloudSat/DATA/tropical_valid/sw_valid_idx.json",
             "w"

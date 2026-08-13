@@ -107,6 +107,90 @@ def _single_file(
     return local_qr_sum, local_qr_cnt
 
 # ====================================================
+# Test function
+# ====================================================
+def test_interpolation_match(
+        year: int,
+        date: int,
+        z_ds: xr.Dataset,
+        fpath: str
+        ) -> None:
+    """
+    Test whether the interpolation matches the original data by plotting and numerical comparison.
+    """
+    import matplotlib.pyplot as plt
+    
+    files = list(glob.glob(fpath+"/*.hdf"))
+    if not files:
+        print("No CloudSat files found for testing.")
+        return
+        
+    lon_name: str = "lon"
+    lat_name: str = "lat"
+    lev_name: str = "plev"
+    var_name: str = "Z"
+
+    lon_era5: np.ndarray = z_ds[lon_name].values
+    lat_era5: np.ndarray = z_ds[lat_name].values
+    
+    z_da: xr.DataArray = z_ds[var_name].squeeze().transpose(lev_name, lat_name, lon_name)
+    if z_da.attrs.get("units", "") in ["m**2 s**-2", "m2 s-2"]:
+        z_era5: np.ndarray = z_da.values / 9.80665
+    else:
+        z_era5: np.ndarray = z_da.values
+        
+    for file in files:
+        lon_ray, lat_ray, hgt, qlw, qsw = cs_io.load_data(file)
+        i_lat, i_lon, valid = grid.assign_rays_to_grid(lon_era5, lat_era5, lon_ray, lat_ray)
+        valid_idx = np.where(valid)[0]
+        
+        if len(valid_idx) > 0:
+            k = valid_idx[len(valid_idx) // 2] # pick a footprint in the middle
+            
+            z_col = z_era5[:, i_lat[k], i_lon[k]]
+            qlw_interp = grid.interp_profile_to_era5_levels(hgt[k], qlw[k], z_col)
+            qsw_interp = grid.interp_profile_to_era5_levels(hgt[k], qsw[k], z_col)
+            
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 6))
+            
+            good_lw = np.isfinite(hgt[k]) & np.isfinite(qlw[k])
+            good_sw = np.isfinite(hgt[k]) & np.isfinite(qsw[k])
+            
+            ax1.plot(qlw[k][good_lw], hgt[k][good_lw], 'o-', label='Original', markersize=3)
+            ax1.plot(qlw_interp, z_col, 'x-', label='Interpolated', markersize=5)
+            ax1.set_title('QLW Interpolation Match')
+            ax1.set_xlabel('QLW')
+            ax1.set_ylabel('Height [m]')
+            ax1.legend()
+            
+            ax2.plot(qsw[k][good_sw], hgt[k][good_sw], 'o-', label='Original', markersize=3)
+            ax2.plot(qsw_interp, z_col, 'x-', label='Interpolated', markersize=5)
+            ax2.set_title('QSW Interpolation Match')
+            ax2.set_xlabel('QSW')
+            ax2.set_ylabel('Height [m]')
+            ax2.legend()
+            
+            save_path = f"/data92/b11209013/CloudSat/Code/interpolation_test_{year}_{date:03d}.png"
+            plt.tight_layout()
+            plt.savefig(save_path)
+            print(f"Interpolation test plot saved to {save_path}")
+            
+            print("\nNumerical comparison for the valid interpolated points (QLW):")
+            print("Height [m]\tInterpolated\tOriginal (nearest point)")
+            count = 0
+            for i in range(len(z_col)):
+                if np.isfinite(qlw_interp[i]):
+                    nearest_idx = np.nanargmin(np.abs(hgt[k][good_lw] - z_col[i]))
+                    orig_val = qlw[k][good_lw][nearest_idx]
+                    print(f"{z_col[i]:.1f}\t\t{qlw_interp[i]:.4f}\t\t{orig_val:.4f}")
+                    count += 1
+                    if count >= 10: # Just show first 10 for brevity
+                        print("...")
+                        break
+            
+            return
+
+# ====================================================
 # Main function
 # ====================================================
 
@@ -203,6 +287,7 @@ if __name__ == "__main__":
     parser.add_argument("--year", type=int, required=True, help="Processing Year (YYYY)")
     parser.add_argument("--date", type=int, required=True, help="Processing Julian Date (1-366)")
     parser.add_argument("--era5", type=str, required=True, help="Path to ERA5 geopotential height NetCDF file")
+    parser.add_argument("--test_interp", action="store_true", help="Run interpolation test and plot the result instead of processing")
     args = parser.parse_args()
 
     year = args.year
@@ -228,6 +313,11 @@ if __name__ == "__main__":
     # Load geopotential height from ERA5
     with xr.open_dataset(era5_file, chunks={}, engine="netcdf4") as z_ds:
         z_ds_sel: xr.Dataset = z_ds.isel(time=time_idx)
+
+        if args.test_interp:
+            fpath: str = f"/work/DATA/Satellite/CloudSat/{year}/{date:03d}"
+            test_interpolation_match(year=year, date=date, z_ds=z_ds_sel, fpath=fpath)
+            sys.exit(0)
 
         # use main function
         main(year=year, date=date, z_ds=z_ds_sel, data_dir=data_path+f"{date:03d}.nc")

@@ -23,8 +23,15 @@ def assign_rays_to_grid(
     dy: float = lat_grid[1] - lat_grid[0]
     lon_edges: np.ndarray = np.linspace(lon_grid[0] - dx/2, lon_grid[-1] + dx/2, len(lon_grid) + 1)
     lat_edges: np.ndarray = np.linspace(lat_grid[0] - dy/2, lat_grid[-1] + dy/2, len(lat_grid) + 1)
-    i_lon: np.ndarray = np.searchsorted(lon_edges, lon_ray, side="right") - 1
-    i_lat: np.ndarray = np.searchsorted(lat_edges, lat_ray, side="right") - 1
+    if dx < 0:
+        i_lon = len(lon_grid) - 1 - (np.searchsorted(lon_edges[::-1], lon_ray, side="right") - 1)
+    else:
+        i_lon = np.searchsorted(lon_edges, lon_ray, side="right") - 1
+
+    if dy < 0:
+        i_lat = len(lat_grid) - 1 - (np.searchsorted(lat_edges[::-1], lat_ray, side="right") - 1)
+    else:
+        i_lat = np.searchsorted(lat_edges, lat_ray, side="right") - 1
 
     i_lon[i_lon == len(lon_grid)] = 0
 
