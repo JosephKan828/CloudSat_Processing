@@ -23,7 +23,8 @@ for year in $(seq "$START_YEAR" "$END_YEAR"); do
         TARGET_DIR="/work/DATA/Satellite/CloudSat/${YEAR}/${PADDED_DATE}"
         
         if [ -d "$TARGET_DIR" ]; then
-            nice -n 19 python /data92/b11209013/CloudSat/Code/QR_Itp_optimized.py --year "$YEAR" --date "$DAY"
+            # nice -n 19 python /data92/b11209013/CloudSat/Code/QR_Itp_optimized.py --year "$YEAR" --date "$DAY"
+            nice -n 19 python /data92/b11209013/CloudSat/Code/QR_Itp.py --year "$YEAR" --date "$DAY"
         else
             echo "Skipping Year: $YEAR, Date: ${PADDED_DATE} (Directory not found)"
         fi
@@ -31,7 +32,8 @@ for year in $(seq "$START_YEAR" "$END_YEAR"); do
 
   echo "Start concatenate and fill data for year ${year}"
 
-  nice -n 19 python /data92/b11209013/CloudSat/Code/concat_data_optimized.py --year "$year"
+  # nice -n 19 python /data92/b11209013/CloudSat/Code/concat_data_optimized.py --year "$year"
+  nice -n 19 python /data92/b11209013/CloudSat/Code/concat_data.py --year "$year"
 
 done
 

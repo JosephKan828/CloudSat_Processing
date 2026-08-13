@@ -20,14 +20,10 @@ os.environ["NUMEXPR_NUM_THREADS"] = str(CPU_LIMIT)
 # import package
 import sys
 import glob
+from builtins import str
 import numpy as np
 import pandas as pd
 import xarray as xr
-import concurrent.futures
-
-from pprint import pprint
-
-import matplotlib.pyplot as plt
 
 # import local package
 sys.path.append("/data92/b11209013/CloudSat/Code/utils")
@@ -64,22 +60,49 @@ def _single_file(
     i_lon = np.atleast_1d(i_lon)
     valid = np.atleast_1d(valid)
 
+    valid_idx = np.where(valid)[0]
+    num_valid = len(valid_idx)
+    
+    if num_valid == 0:
+        return local_qr_sum, local_qr_cnt
+
+    # Pre-allocate profile arrays
+    qlw_profiles = np.full((n_lev, num_valid), np.nan)
+    qsw_profiles = np.full((n_lev, num_valid), np.nan)
+
     # Apply interpolation
-    for k in np.where(valid)[0]:
+    for p, k in enumerate(valid_idx):
         z_col: np.ndarray = z_era5[:, i_lat[k], i_lon[k]]
 
-        qlw_lev = grid.interp_profile_to_era5_levels(hgt[k], qlw[k], z_col)
-        qsw_lev = grid.interp_profile_to_era5_levels(hgt[k], qsw[k], z_col)
+        qlw_profiles[:, p] = grid.interp_profile_to_era5_levels(hgt[k], qlw[k], z_col)
+        qsw_profiles[:, p] = grid.interp_profile_to_era5_levels(hgt[k], qsw[k], z_col)
 
-        # calculate for sw
-        m_sw: np.ndarray = np.isfinite(qsw_lev)
-        local_qr_sum[m_sw, i_lat[k], i_lon[k], 0] += qsw_lev[m_sw]
-        local_qr_cnt[m_sw, i_lat[k], i_lon[k], 0] += 1
+    # Gather grid coordinates for all valid footprints
+    lat_idx = i_lat[valid_idx]
+    lon_idx = i_lon[valid_idx]
 
-        # calculate for lw
-        m_lw: np.ndarray = np.isfinite(qlw_lev)
-        local_qr_sum[m_lw, i_lat[k], i_lon[k], 1] += qlw_lev[m_lw]
-        local_qr_cnt[m_lw, i_lat[k], i_lon[k], 1] += 1
+    # Create 2D arrays of coordinates for np.add.at broadcasting
+    # Shape: (n_lev, num_valid)
+    lev_2d, lat_2d = np.broadcast_arrays(np.arange(n_lev)[:, None], lat_idx[None, :])
+    _, lon_2d = np.broadcast_arrays(np.arange(n_lev)[:, None], lon_idx[None, :])
+
+    # Flatten for np.add.at
+    lev_flat = lev_2d.flatten()
+    lat_flat = lat_2d.flatten()
+    lon_flat = lon_2d.flatten()
+    
+    qsw_flat = qsw_profiles.flatten()
+    qlw_flat = qlw_profiles.flatten()
+
+    # calculate for sw using np.add.at
+    m_sw = np.isfinite(qsw_flat)
+    np.add.at(local_qr_sum[..., 0], (lev_flat[m_sw], lat_flat[m_sw], lon_flat[m_sw]), qsw_flat[m_sw])
+    np.add.at(local_qr_cnt[..., 0], (lev_flat[m_sw], lat_flat[m_sw], lon_flat[m_sw]), 1)
+
+    # calculate for lw using np.add.at
+    m_lw = np.isfinite(qlw_flat)
+    np.add.at(local_qr_sum[..., 1], (lev_flat[m_lw], lat_flat[m_lw], lon_flat[m_lw]), qlw_flat[m_lw])
+    np.add.at(local_qr_cnt[..., 1], (lev_flat[m_lw], lat_flat[m_lw], lon_flat[m_lw]), 1)
 
     return local_qr_sum, local_qr_cnt
 
@@ -114,10 +137,23 @@ def main(
     # ------------------------------------------------
     # unpack ERA5 data
     # ------------------------------------------------
-    lon_era5: np.ndarray = z_ds["lon"].values
-    lat_era5: np.ndarray = z_ds["lat"].values
-    lev_era5: np.ndarray = z_ds["level"].values
-    z_era5  : np.ndarray = z_ds["z"].values / 9.80665 # convert geopotential into geopotential height
+    lon_name: str = "lon"
+    lat_name: str = "lat"
+    lev_name: str = "plev"
+    var_name: str = "Z"
+
+
+    lon_era5: np.ndarray = z_ds[lon_name].values
+    lat_era5: np.ndarray = z_ds[lat_name].values
+    lev_era5: np.ndarray = z_ds[lev_name].values
+
+    z_da: xr.DataArray = z_ds[var_name].squeeze().transpose(lev_name, lat_name, lon_name)  # Remove any singleton dimensions
+
+    if z_da.attrs.get("units", "") in ["m**2 s**-2", "m2 s-2"]:
+        z_era5: np.ndarray = z_da.values / 9.80665  # convert geopotential into geopotential height
+    else:
+        print(f"Warning: Unexpected units for geopotential height: {z_da.attrs.get('units', 'unknown')}. Proceeding without conversion.")
+        z_era5: np.ndarray = z_da.values  # Use the values as-is if units are unexpected
     
     n_lev, n_lat, n_lon = z_era5.shape
 
@@ -129,7 +165,7 @@ def main(
     qr_sum: np.ndarray = np.zeros((n_lev, n_lat, n_lon, 2))
     qr_cnt: np.ndarray = np.zeros((n_lev, n_lat, n_lon, 2))
 
-    num_cores = 8 
+    # num_cores = 8 
 
     for f in files:
         local_sum, local_cnt = _single_file(f, lon_era5, lat_era5, z_era5)
@@ -177,9 +213,22 @@ if __name__ == "__main__":
     data_path: str = f"/data92/b11209013/CloudSat/DATA/{year}/"
     os.makedirs(data_path, exist_ok=True)
 
+    # Assign time series
+    time_series: pd.DatetimeIndex = pd.date_range(start=f"2006-01-01", end=f"2017-12-31", freq="D")
+
+    # boolean mask for the requested date in the time series
+    time_idx: np.ndarray = (time_series.year == year) & (time_series.dayofyear == date)
+
+    if not time_idx.any():
+        print(f"Error: The specified year {year} and date {date} do not correspond to a valid date in the time series.")
+        sys.exit(1)
+
     # Load geopotential height from ERA5
-    with xr.open_dataset(f"/data92/b11209013/ERA5/z/z_{year}.nc", chunks={}, engine="netcdf4") as z_ds:
-        z_ds: xr.Dataset = z_ds.isel(time=date-1)
+    with xr.open_dataset(
+        "/data92/b11209013/ERA5_GRIB/Data/ERA5_PRS_Z_2006-2017_r1440x721_day.nc",
+        chunks={}, engine="netcdf4"
+        ) as z_ds:
+        z_ds_sel: xr.Dataset = z_ds.isel(time=time_idx)
 
         # use main function
-        main(year=year, date=date, z_ds=z_ds, data_dir=data_path+f"{date:03d}.nc")
+        main(year=year, date=date, z_ds=z_ds_sel, data_dir=data_path+f"{date:03d}.nc")

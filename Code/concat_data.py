@@ -3,12 +3,8 @@
 # heating dataset, and insert NAN value into missing
 # ----------------------------------------------------
 
-# ----------------------------------------------------
-# Environment Setup
-# ----------------------------------------------------
-
 # limit CPU usage
-CPU_LIMIT: int = 1
+CPU_LIMIT = 1
 
 import os
 os.environ["OMP_NUM_THREADS"] = str(CPU_LIMIT)
@@ -17,128 +13,109 @@ os.environ["OPENBLAS_NUM_THREADS"] = str(CPU_LIMIT)
 os.environ["VECLIB_MAXIMUM_THREADS"] = str(CPU_LIMIT)
 os.environ["NUMEXPR_NUM_THREADS"] = str(CPU_LIMIT)
 
-# import package
-import sys
+# import sys
 import glob
 import numpy as np
 import pandas as pd
-import xarray as xr
-
-xr.set_options(file_cache_maxsize=128)
-
+import netCDF4 as nc
+from datetime import datetime
 from tqdm import tqdm
-from pprint import pprint
 
-import matplotlib.pyplot as plt
-
-# import local package
-sys.path.append("/data92/b11209013/CloudSat/Code/utils")
-import cs_io
-import grid
-
-# ====================================================
-# Main function
-# ====================================================
-
-def main(
-    year: int
-) -> None:
+def main(year: int) -> None:
     """
     Main function for this script
     """
-
-    # ------------------------------------------------
-    # Load data
-    # ------------------------------------------------
-    # collect data
-
-    file_dir: str = f"/data92/b11209013/CloudSat/DATA/{year}"
-    files: list[str] = sorted(list(glob.glob(f"{file_dir}/*.nc")))
+    file_dir = f"/data92/b11209013/CloudSat/DATA/{year}"
+    files = sorted(list(glob.glob(f"{file_dir}/*.nc")))
 
     if not files:
         print(f"No files found for year {year}")
         return
 
-    # collect days
-    dates: list[int] = [int(f.split("/")[-1].split(".")[0]) for f in files]
+    # Assign file saving directory
+    save_dir = "/data92/b11209013/CloudSat/DATA/yearly"
+    os.makedirs(save_dir, exist_ok=True)
+    save_path = f"{save_dir}/{year}.nc"
+
+    # Determine number of days in the year (accounting for leap years)
+    days_in_year = 366 if (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0) else 365
     
-    # ------------------------------------------------
-    # Save the data
-    # ------------------------------------------------
-    # assign file saving directory
-    save_path: str = f"/data92/b11209013/CloudSat/DATA/yearly/{year}.nc"
+    # 1. Read the first file to grab dimensions and grid coordinates
+    with nc.Dataset(files[0], 'r') as src:
+        lev = src.variables['level'][:]
+        lat = src.variables['lat'][:]
+        lon = src.variables['lon'][:]
+        n_lev, n_lat, n_lon = len(lev), len(lat), len(lon)
 
-    # 1. Load all available files instantly in parallel
-    print(f"Loading {len(files)} files via open_mfdataset...")
+    print(f"Creating master yearly dataset: {save_path}")
     
-    # We must chunk along time (e.g., 30 days) instead of 1 day to drastically reduce the number of disk I/O writes.
-    ds_combine = xr.open_mfdataset(
-        files, 
-        combine="nested", 
-        concat_dim="time", 
-        parallel=True,
-        chunks={'time': 30, 'lev': -1, 'lat': -1, 'lon': -1} 
-    )
-    
-    # 2. Let Xarray automatically fill all missing dates with NaNs
-    print("Reindexing to fill missing days...")
-    year_date = pd.date_range(start=f"{year}-01-01", end=f"{year}-12-31", freq="1D")
-    ds_combine = ds_combine.reindex(time=year_date)
-
-    ds_combine.attrs = {
-        "title": "CloudSat Radiative Heating Rate",
-        "description": (
-            "Annual concatenated CloudSat Radiative Heating dataset. "
-            "Interpolated to ERA5 spatial grid. Missing days are filled with NaNs."
-        ),
-        "author": "Yu-Chuan Kan",
-        "institution": "Department of Atmospheric Sciences, National Taiwan University",
-        "contact": "r14229003@ntu.edu.tw",
-        "history": f"Created on {pd.Timestamp.now().strftime('%Y-%m-%d')} via Python xarray.",
-        "source": "CloudSat Level 2 FLXHR-Lidar product (or appropriate source)",
-        "Conventions": "CF-1.8" 
-    }
-
-    ds_combine = ds_combine.transpose("time", "lev", "lat", "lon")
-    ds_combine.encoding["unlimited_dims"] = ["time"]
-
-    # 3. Add compression! Without this, it writes a 112GB raw uncompressed file, which takes forever!
-    encoding_settings = {
-        "QSW": {"zlib": True, "complevel": 5, "_FillValue": np.nan},
-        "QLW": {"zlib": True, "complevel": 5, "_FillValue": np.nan},
-        "time": {"units": "days since 1900-01-01 00:00:00"}
-    }
-
-    # write out the finalized dataset
-    print(f"Writing concatenated dataset to {save_path}...")
-    ds_combine.to_netcdf(save_path, encoding=encoding_settings)
-
-    #  close ds
-    ds_combine.close()
-
-
+    # 2. Pre-allocate the master NetCDF file
+    with nc.Dataset(save_path, 'w', format='NETCDF4') as dst:
         
+        # Dimensions
+        dst.createDimension('time', days_in_year)
+        dst.createDimension('lev', n_lev)
+        dst.createDimension('lat', n_lat)
+        dst.createDimension('lon', n_lon)
+        
+        # Coordinate Variables
+        time_var = dst.createVariable('time', 'f8', ('time',))
+        lev_var = dst.createVariable('lev', 'f4', ('lev',))
+        lat_var = dst.createVariable('lat', 'f4', ('lat',))
+        lon_var = dst.createVariable('lon', 'f4', ('lon',))
+        
+        # Assign coordinate values
+        # Time array: days since 1900-01-01
+        base_date = datetime(1900, 1, 1)
+        year_start = datetime(year, 1, 1)
+        start_offset = (year_start - base_date).days
+        time_var[:] = np.arange(start_offset, start_offset + days_in_year)
+        time_var.units = "days since 1900-01-01 00:00:00"
+        
+        lev_var[:] = lev
+        lat_var[:] = lat
+        lon_var[:] = lon
+        
+        # 3. Create Main Data Variables
+        # Chunks: 1 time step, all spatial points (since we write 1 day at a time)
+        var_kwargs = {
+            'zlib': True, 
+            'complevel': 1, 
+            'fill_value': np.nan,
+            'chunksizes': (1, n_lev, n_lat, n_lon)
+        }
+        
+        qsw_var = dst.createVariable('QSW', 'f4', ('time', 'lev', 'lat', 'lon'), **var_kwargs)
+        qlw_var = dst.createVariable('QLW', 'f4', ('time', 'lev', 'lat', 'lon'), **var_kwargs)
+        
+        # Global Attributes
+        dst.title = "CloudSat Radiative Heating Rate"
+        dst.description = "Annual concatenated CloudSat Radiative Heating dataset. Interpolated to ERA5 spatial grid. Missing days are filled with NaNs."
+        dst.author = "Yu-Chuan Kan"
+        dst.institution = "Department of Atmospheric Sciences, National Taiwan University"
+        dst.contact = "r14229003@ntu.edu.tw"
+        dst.history = f"Created on {pd.Timestamp.now().strftime('%Y-%m-%d')} via Python netCDF4."
+        dst.source = "CloudSat Level 2 FLXHR-Lidar product (or appropriate source)"
+        dst.Conventions = "CF-1.8"
+        
+        # 4. Loop through daily files and drop data directly into the time slot
+        print(f"Inserting {len(files)} daily files into yearly dataset...")
+        for f in tqdm(files, desc=f"Processing Year {year}"):
+            # Filename is {JulianDay}.nc, e.g., 001.nc -> day 1
+            day_num = int(os.path.basename(f).split('.')[0])
+            idx = day_num - 1 # 0-indexed for the time array
+            
+            with nc.Dataset(f, 'r') as src:
+                # Read 3D daily data and reshape to guarantee exact match
+                qsw_var[idx, :, :, :] = src.variables['QSW'][:].reshape(n_lev, n_lat, n_lon)
+                qlw_var[idx, :, :, :] = src.variables['QLW'][:].reshape(n_lev, n_lat, n_lon)
 
-
-# ====================================================
-# Execute main function
-# ====================================================
+    print(f"Successfully generated {save_path}")
 
 if __name__ == "__main__":
-
     import argparse
-
     parser = argparse.ArgumentParser(description="concatenate data")
-
     parser.add_argument("--year", type=int, required=True)
     args = parser.parse_args()
-
-    # Removed the explicit dask Client() here. 
-    # Xarray will automatically fall back to the default Dask threaded scheduler, 
-    # which has built-in thread locks specifically designed to safely write NetCDF4 files!
-
+    
     main(year=args.year)
-
-    # for year in range(2006, 2018):
-    #     print(f"Processing Year: {year:04d}")
-    #     main(year=year)

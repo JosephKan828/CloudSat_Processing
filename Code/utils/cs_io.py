@@ -1,4 +1,4 @@
-from pyhdf.HC  import HC
+# from pyhdf.HC  import HC
 from pyhdf.SD  import SD, SDC, HDF4Error
 from pyhdf.VS  import VS
 from pyhdf.HDF import HDF
@@ -8,7 +8,7 @@ import pandas as pd
 import xarray as xr
 
 def load_data(fname) -> tuple[np.ndarray, ...]:
-    from pyhdf.VS  import VS
+    # from pyhdf.VS  import VS
 
     hdf = HDF(fname, SDC.READ)
 
