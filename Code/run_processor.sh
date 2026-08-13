@@ -4,6 +4,15 @@ START_YEAR=2006
 END_YEAR=2017
 MAX_JOBS=16
 
+# Set the data directory path
+data_dir="/data92/b11209013/CloudSat/DATA"
+
+# ERA5 source directory
+era5_file="/data92/b11209013/ERA5_GRIB/Data/ERA5_PRS_Z_2006-2017_r1440x721_day.nc"
+
+# final file name
+final_file="${data_dir}/QR_gridded_15layer.nc"
+
 # Loop through each year
 for year in $(seq "$START_YEAR" "$END_YEAR"); do
 
@@ -23,8 +32,7 @@ for year in $(seq "$START_YEAR" "$END_YEAR"); do
         TARGET_DIR="/work/DATA/Satellite/CloudSat/${YEAR}/${PADDED_DATE}"
         
         if [ -d "$TARGET_DIR" ]; then
-            # nice -n 19 python /data92/b11209013/CloudSat/Code/QR_Itp_optimized.py --year "$YEAR" --date "$DAY"
-            nice -n 19 python /data92/b11209013/CloudSat/Code/QR_Itp.py --year "$YEAR" --date "$DAY"
+            nice -n 19 python /data92/b11209013/CloudSat/Code/QR_Itp.py --year "$YEAR" --date "$DAY" --era5 "$era5_file"
         else
             echo "Skipping Year: $YEAR, Date: ${PADDED_DATE} (Directory not found)"
         fi
@@ -32,8 +40,10 @@ for year in $(seq "$START_YEAR" "$END_YEAR"); do
 
   echo "Start concatenate and fill data for year ${year}"
 
-  # nice -n 19 python /data92/b11209013/CloudSat/Code/concat_data_optimized.py --year "$year"
-  nice -n 19 python /data92/b11209013/CloudSat/Code/concat_data.py --year "$year"
+  # nice -n 19 python /data92/b11209013/CloudSat/Code/yearly_concat.py --year "$year"
+  nice -n 19 python /data92/b11209013/CloudSat/Code/yearly_concat.py --year "$year"
+
+  rm -rf /data92/b11209013/CloudSat/DATA/${year}
 
 done
 
@@ -41,8 +51,8 @@ echo "All years processed successfully!"
 
 echo "Merge all-year radiative heating data"
 
-data_dir="/data92/b11209013/CloudSat/DATA"
+cdo -P 16 -L -O mergetime "${data_dir}/yearly/tmp_20"*.nc ${final_file}
 
-cdo -P 16 -L -O mergetime "${data_dir}/yearly/20"*.nc "${data_dir}/QR_gridded.nc"
+rm -rf "${data_dir}/yearly"
 
 echo "Finish merging"

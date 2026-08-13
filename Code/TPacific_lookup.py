@@ -33,9 +33,13 @@ from typing import List, Dict
 
 def main() -> None:
     
+    # Create output directory if it doesn't exist
+    output_dir = "/data92/b11209013/CloudSat/DATA/tropical_valid"
+    os.makedirs(output_dir, exist_ok=True)
+
     # Load Radiative heating data
     with nc.Dataset(
-            "/data92/b11209013/CloudSat/DATA/QR_gridded.nc",
+            "/data92/b11209013/CloudSat/DATA/QR_gridded_15layer.nc",
             "r"
             ) as rad_ds:
 
@@ -81,18 +85,10 @@ def main() -> None:
         sw_row_idx_tmp, sw_col_idx_tmp = np.where(~np.isnan(sw[t, -1]))
 
         ## save into dictionary
-        # lw_valid_idx[t] = {
-        #         "row": lw_row_idx_tmp,
-        #         "col": lw_row_idx_tmp
-        #         }
         lw_valid_idx[t] = {
                 "row": lw_row_idx_tmp.tolist(),
                 "col": lw_col_idx_tmp.tolist()
                 }
-        # sw_valid_idx[t] = {
-        #         "row": sw_row_idx_tmp,
-        #         "col": sw_col_idx_tmp
-        #         }
         sw_valid_idx[t] = {
                 "row": sw_row_idx_tmp.tolist(),
                 "col": sw_col_idx_tmp.tolist()

@@ -202,10 +202,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process CloudSat Radiative Heating")
     parser.add_argument("--year", type=int, required=True, help="Processing Year (YYYY)")
     parser.add_argument("--date", type=int, required=True, help="Processing Julian Date (1-366)")
+    parser.add_argument("--era5", type=str, required=True, help="Path to ERA5 geopotential height NetCDF file")
     args = parser.parse_args()
 
     year = args.year
     date = args.date
+    era5_file = args.era5
 
     print(f"Processing Year: {year} Date: {date:03d}")
 
@@ -224,10 +226,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     # Load geopotential height from ERA5
-    with xr.open_dataset(
-        "/data92/b11209013/ERA5_GRIB/Data/ERA5_PRS_Z_2006-2017_r1440x721_day.nc",
-        chunks={}, engine="netcdf4"
-        ) as z_ds:
+    with xr.open_dataset(era5_file, chunks={}, engine="netcdf4") as z_ds:
         z_ds_sel: xr.Dataset = z_ds.isel(time=time_idx)
 
         # use main function

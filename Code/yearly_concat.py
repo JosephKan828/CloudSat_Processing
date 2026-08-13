@@ -35,7 +35,7 @@ def main(year: int) -> None:
     # Assign file saving directory
     save_dir = "/data92/b11209013/CloudSat/DATA/yearly"
     os.makedirs(save_dir, exist_ok=True)
-    save_path = f"{save_dir}/{year}.nc"
+    save_path = f"{save_dir}/tmp_{year}.nc"
 
     # Determine number of days in the year (accounting for leap years)
     days_in_year = 366 if (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0) else 365
