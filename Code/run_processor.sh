@@ -8,7 +8,7 @@ MAX_JOBS=16
 data_dir="/data92/b11209013/CloudSat/DATA"
 
 # ERA5 source directory
-era5_file="/data92/b11209013/ERA5_GRIB/Data/ERA5_PRS_Z_2006-2017_r1440x721_day.nc"
+export era5_file="/data92/b11209013/ERA5_GRIB/Data/ERA5_PRS_Z_2006-2017_r1440x721_day.nc"
 
 # final file name
 final_file="${data_dir}/QR_gridded_15layer.nc"
